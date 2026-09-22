@@ -32,7 +32,7 @@ if not use_demo_data:
     uploaded_customer_file = st.sidebar.file_uploader("CSV — Customer Data", type="csv")
 
 st.sidebar.divider()
-st.sidebar.caption(f"Kapasitas/feeder: {config.MAX_PER_FEEDER_KW} kW")
+st.sidebar.caption(f"Capacity/feeder: {config.MAX_PER_FEEDER_KW} kW")
 st.sidebar.caption(f"Trigger tier: {config.TRIGGER_RATIO * 100:.0f}%")
 
 # ---------- Load data ----------
@@ -103,7 +103,7 @@ df_dr = pd.DataFrame(
     ]
 )
 st.dataframe(df_dr, use_container_width=True, hide_index=True)
-st.caption(f"Total target curtailment (akumulasi): **{target_curtailment_total:.2f} kW**")
+st.caption(f"Total target curtailment (accumulation): **{target_curtailment_total:.2f} kW**")
 
 st.divider()
 
