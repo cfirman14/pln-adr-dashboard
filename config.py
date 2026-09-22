@@ -3,14 +3,10 @@ PART 0 — KONFIGURASI LOKASI
 Titik ganti tunggal kalau project ini dipakai untuk GI/feeder lain.
 """
 
-LOCATION_NAME = "GI Garut"
-
-# Nama feeder & nama file CSV default (dipakai kalau user tidak upload file sendiri)
-FEEDER_FILES = {
-    "F. Cikelet": "normalFeeder.csv",
-    "F. Cipanas": "normalFeeder2.csv",
-    "F. Cikopo": "normalFeeder3.csv",
-}
+# Nama file CSV default (dipakai kalau user tidak upload file sendiri).
+# Sekarang cukup 1 file untuk semua GI & feeder — GI dipilih dinamis di
+# sidebar dashboard berdasarkan isi kolom "GI" pada file ini.
+FEEDER_DATA_FILE = "Feeder.csv"
 
 # Kapasitas & threshold
 MAX_PER_FEEDER_KW = 500       # kW, kapasitas maksimal per feeder
