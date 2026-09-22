@@ -1,6 +1,6 @@
 """
 Dashboard Demand Response — OpenADR PoC
-Jalankan lokal:  streamlit run app.py
+Run Local:  streamlit run app.py
 """
 
 import json
@@ -17,19 +17,19 @@ from utils.openadr_events import build_all_events
 st.set_page_config(page_title=f"DR Dashboard — {config.LOCATION_NAME}", layout="wide")
 
 # ---------- Sidebar: sumber data ----------
-st.sidebar.header("Sumber Data")
-use_demo_data = st.sidebar.toggle("Pakai data contoh (demo)", value=True)
+st.sidebar.header("Data Source")
+use_demo_data = st.sidebar.toggle("Use Demo Data", value=True)
 
 uploaded_feeder_files = {}
 uploaded_customer_file = None
 
 if not use_demo_data:
-    st.sidebar.caption("Upload CSV feeder (format sama seperti file AMR/SCADA)")
+    st.sidebar.caption("Upload CSV feeder")
     for feeder_name in config.FEEDER_FILES:
         uploaded_feeder_files[feeder_name] = st.sidebar.file_uploader(
             f"CSV — {feeder_name}", type="csv", key=f"upload_{feeder_name}"
         )
-    uploaded_customer_file = st.sidebar.file_uploader("CSV — Data Pelanggan", type="csv")
+    uploaded_customer_file = st.sidebar.file_uploader("CSV — Customer Data", type="csv")
 
 st.sidebar.divider()
 st.sidebar.caption(f"Kapasitas/feeder: {config.MAX_PER_FEEDER_KW} kW")
@@ -39,7 +39,7 @@ st.sidebar.caption(f"Trigger tier: {config.TRIGGER_RATIO * 100:.0f}%")
 try:
     feeder_data = load_feeder_data(config.FEEDER_FILES, uploaded_feeder_files)
 except Exception as e:
-    st.error(f"Gagal membaca data feeder: {e}")
+    st.error(f"Fail to read feeder data: {e}")
     st.stop()
 
 # ---------- Part 3: Threshold check ----------
@@ -54,12 +54,12 @@ dr_results, target_curtailment_total = run_dr_trigger_check(
 # HEADER
 # ============================================================
 st.title(f"⚡ Demand Response Dashboard — {config.LOCATION_NAME}")
-st.caption("Simulasi Proof of Concept — OpenADR 3.1")
+st.caption("Simulation — OpenADR 3.1")
 
 # ============================================================
 # SECTION 1 — Kondisi terkini per feeder
 # ============================================================
-st.subheader("Kondisi Terkini")
+st.subheader("Current Condition")
 
 cols = st.columns(len(feeder_data) + 1)
 
@@ -108,16 +108,16 @@ st.caption(f"Total target curtailment (akumulasi): **{target_curtailment_total:.
 st.divider()
 
 # ============================================================
-# SECTION 3 — Alokasi per pelanggan
+# SECTION 3 — Target per Customer
 # ============================================================
-st.subheader("Alokasi Curtailment per Pelanggan")
+st.subheader("Curtailment Target per Customer")
 
 try:
     df_customers = load_customer_data(uploaded_customer_file)
     df_alloc = allocate_customer_curtailment(dr_results, df_customers, config.CUSTOMER_NAME_COL)
 
     if df_alloc.empty:
-        st.info("Tidak ada feeder berstatus TRIGGER — tidak ada alokasi curtailment saat ini.")
+        st.info("No TRIGGER — No need curtailment.")
     else:
         for feeder_name in df_alloc["FEEDER"].unique():
             subset = df_alloc[df_alloc["FEEDER"] == feeder_name]
@@ -133,22 +133,22 @@ try:
                     hide_index=True,
                 )
 except Exception as e:
-    st.warning(f"Data pelanggan belum tersedia: {e}")
+    st.warning(f"No Cust. Data Available: {e}")
     df_alloc = pd.DataFrame()
 
 st.divider()
 
 # ============================================================
-# SECTION 4 — OpenADR Events (simulasi)
+# SECTION 4 — OpenADR Events (Simulation)
 # ============================================================
-st.subheader("OpenADR 3.1 Events (Simulasi)")
+st.subheader("OpenADR 3.1 Events (Simulation)")
 
 if not df_alloc.empty:
     feeder_names = list(config.FEEDER_FILES.keys())
     program_registry = config.build_program_registry(feeder_names)
     events = build_all_events(df_alloc, config.CUSTOMER_NAME_COL, program_registry)
 
-    st.caption(f"Total event dibuat: {len(events)} (satu per pelanggan yang kena curtailment)")
+    st.caption(f"Total event: {len(events)}")
 
     if events:
         st.json(events[0], expanded=False)
@@ -159,4 +159,4 @@ if not df_alloc.empty:
             mime="application/json",
         )
 else:
-    st.info("Belum ada event — semua feeder NORMAL.")
+    st.info("No event — all feeders are NORMAL.")
