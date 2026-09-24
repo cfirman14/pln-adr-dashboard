@@ -35,7 +35,7 @@ except Exception as e:
     st.error(f"Fail to read data feeder: {e}")
     st.stop()
 
-# ---------- Pilih GI ----------
+# ---------- Choose Substation ----------
 gi_list = sorted(df_feeder_raw["GI"].unique())
 selected_gi = st.sidebar.selectbox("Choose Substation", gi_list)
 
@@ -43,7 +43,7 @@ st.sidebar.divider()
 st.sidebar.caption(f"Capacity/feeder: {config.MAX_PER_FEEDER_KW} kW")
 st.sidebar.caption(f"Trigger tier: {config.TRIGGER_RATIO * 100:.0f}%")
 
-# ---------- Snapshot terakhir untuk GI terpilih ----------
+# ---------- Choosen Substation ----------
 feeder_data = get_latest_snapshot(df_feeder_raw, selected_gi)
 if not feeder_data:
     st.error(f"No feeder data for this substation '{selected_gi}'.")
@@ -66,7 +66,7 @@ st.caption("Simulation — OpenADR 3.0")
 # ============================================================
 # SECTION 1 — Kondisi terkini per feeder
 # ============================================================
-st.subheader("Kondisi Terkini")
+st.subheader("Current Condition")
 
 cols = st.columns(len(feeder_data) + 1)
 
