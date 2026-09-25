@@ -1,5 +1,5 @@
 """
-PART 3 & 4 — Threshold check dan DR trigger + target curtailment.
+Threshold check dan DR trigger + target curtailment.
 """
 
 
