@@ -13,6 +13,7 @@ from utils.data_loader import load_feeder_data, get_latest_snapshot, load_custom
 from utils.threshold import run_threshold_check, run_dr_trigger_check
 from utils.curtailment import allocate_customer_curtailment
 from utils.openadr_events import build_all_events
+from utils.notify import send_notifications
 
 st.set_page_config(page_title="DR Dashboard — OpenADR PoC", layout="wide")
 
@@ -146,7 +147,54 @@ except Exception as e:
 st.divider()
 
 # ============================================================
-# SECTION 4 — OpenADR Events (simulasi)
+# SECTION 4 — Kirim Notifikasi Demand Response ke Pelanggan
+# ============================================================
+st.subheader("Kirim Notifikasi Demand Response ke Pelanggan")
+
+if df_alloc.empty:
+    st.info("Tidak ada pelanggan yang perlu dinotifikasi saat ini (semua feeder NORMAL).")
+elif config.CUSTOMER_EMAIL_COL not in df_alloc.columns:
+    st.warning(
+        f"Kolom '{config.CUSTOMER_EMAIL_COL}' tidak ditemukan di data pelanggan — "
+        "tidak bisa kirim notifikasi. Tambahkan kolom email di CSV pelanggan."
+    )
+else:
+    st.dataframe(
+        df_alloc[[config.CUSTOMER_NAME_COL, config.CUSTOMER_EMAIL_COL, "FEEDER", "CURTAILMENT_AMOUNT_KW"]]
+        .rename(columns={
+            config.CUSTOMER_NAME_COL: "Pelanggan",
+            config.CUSTOMER_EMAIL_COL: "Email",
+            "CURTAILMENT_AMOUNT_KW": "Target Curtailment (kW)",
+        }),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    if st.button("📧 Kirim Notifikasi ke Semua Pelanggan Terdampak", type="primary"):
+        try:
+            with st.spinner("Mengirim notifikasi..."):
+                results = send_notifications(df_alloc, config.CUSTOMER_NAME_COL, selected_gi)
+
+            success_count = sum(1 for r in results if r["success"])
+            st.success(f"Berhasil mengirim {success_count} dari {len(results)} notifikasi.")
+
+            failed = [r for r in results if not r["success"]]
+            if failed:
+                st.error("Beberapa notifikasi gagal terkirim:")
+                for r in failed:
+                    st.write(f"- **{r['customer']}** ({r['email'] or 'tanpa email'}): {r['error']}")
+        except KeyError as e:
+            st.error(
+                "Konfigurasi notifikasi belum lengkap di Streamlit Secrets "
+                f"(bagian yang hilang: {e}). Lihat README.md untuk setup Gmail & Google Sheets."
+            )
+        except Exception as e:
+            st.error(f"Gagal mengirim notifikasi: {e}")
+
+st.divider()
+
+# ============================================================
+# SECTION 5 — OpenADR Events (simulasi)
 # ============================================================
 st.subheader("OpenADR 3.0 Events (Simulation)")
 

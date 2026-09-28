@@ -16,6 +16,7 @@ SAFE_TARGET_RATIO = 0.80      # target aman setelah curtailment
 # Data pelanggan
 CUSTOMER_FILE = "DataCustomer.csv"
 CUSTOMER_NAME_COL = "NAMA_PELANGGAN"
+CUSTOMER_EMAIL_COL = "EMAIL"
 
 # --- Auto-generate: TIDAK PERLU diubah manual ---
 def slugify(feeder_name: str) -> str:
