@@ -10,41 +10,41 @@ import streamlit as st
 
 from utils.sheets import get_request_by_token, update_status
 
-st.set_page_config(page_title="Respons Demand Response — PLN", layout="centered")
+st.set_page_config(page_title="Demand Response — PLN", layout="centered")
 
-st.title("⚡ Permintaan Demand Response")
-st.caption("Simulasi Proof of Concept — OpenADR 3.1")
+st.title("⚡ Demand Response Request")
+st.caption("Proof of Concept Simulation — OpenADR 3.1")
 
 token = st.query_params.get("token")
 
 if not token:
-    st.error("Link tidak valid — token tidak ditemukan di URL.")
+    st.error("Invalid link — token not found in URL.")
     st.stop()
 
 try:
     request = get_request_by_token(token)
 except Exception as e:
     st.error(
-        "Gagal terhubung ke sistem penyimpanan respons. "
-        "Coba lagi beberapa saat, atau hubungi PLN jika masalah berlanjut."
+        "Failed to connect to the response storage system. "
+        "Please try again in a moment, or contact PLN if the problem persists."
     )
-    st.caption(f"Detail teknis: {e}")
+    st.caption(f"Technical details: {e}")
     st.stop()
 
 if request is None:
-    st.error("Permintaan tidak ditemukan. Link mungkin sudah tidak berlaku.")
+    st.error("Request not found. The link may no longer be valid.")
     st.stop()
 
 st.divider()
-st.subheader(f"Yth. {request['customer_name']}")
+st.subheader(f"Dear {request['customer_name']}")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.metric("Gardu Induk", request["gi"])
+    st.metric("Substation", request["gi"])
 with col2:
     st.metric("Feeder", request["feeder"])
 
-st.metric("Target Pengurangan Daya", f"{float(request['target_curtailment_kw']):.2f} kW")
+st.metric("Target Load Reduction", f"{float(request['target_curtailment_kw']):.2f} kW")
 
 status = str(request.get("status", "PENDING")).upper()
 
@@ -52,30 +52,30 @@ st.divider()
 
 if status == "PENDING":
     st.info(
-        "Mohon konfirmasi kesediaan Anda untuk melakukan pengurangan beban "
-        "sesuai target di atas."
+        "Please confirm your availability to carry out the load reduction "
+        "according to the target above."
     )
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("✅ Terima", use_container_width=True, type="primary"):
+        if st.button("✅ Accept", use_container_width=True, type="primary"):
             if update_status(token, "ACCEPTED"):
-                st.success("Terima kasih! Respons Anda (**TERIMA**) sudah tercatat.")
+                st.success("Thank you! Your response (**ACCEPT**) has been recorded.")
                 st.rerun()
             else:
-                st.error("Gagal menyimpan respons. Coba lagi.")
+                st.error("Failed to save your response. Please try again.")
     with col_b:
-        if st.button("❌ Tolak", use_container_width=True):
+        if st.button("❌ Decline", use_container_width=True):
             if update_status(token, "REJECTED"):
-                st.warning("Respons Anda (**TOLAK**) sudah tercatat.")
+                st.warning("Your response (**DECLINE**) has been recorded.")
                 st.rerun()
             else:
-                st.error("Gagal menyimpan respons. Coba lagi.")
+                st.error("Failed to save your response. Please try again.")
 
 elif status == "ACCEPTED":
-    st.success("Anda sudah **menerima** permintaan ini. Terima kasih atas partisipasinya.")
+    st.success("You have **accepted** this request. Thank you for your participation.")
 
 elif status == "REJECTED":
-    st.warning("Anda sudah **menolak** permintaan ini.")
+    st.warning("You have **declined** this request.")
 
 else:
-    st.info(f"Status permintaan: {status}")
+    st.info(f"Request status: {status}")

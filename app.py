@@ -149,47 +149,47 @@ st.divider()
 # ============================================================
 # SECTION 4 — Kirim Notifikasi Demand Response ke Pelanggan
 # ============================================================
-st.subheader("Kirim Notifikasi Demand Response ke Pelanggan")
+st.subheader("Send Notification to Impacted Customers")
 
 if df_alloc.empty:
-    st.info("Tidak ada pelanggan yang perlu dinotifikasi saat ini (semua feeder NORMAL).")
+    st.info("No Notification (all feeders are NORMAL).")
 elif config.CUSTOMER_EMAIL_COL not in df_alloc.columns:
     st.warning(
-        f"Kolom '{config.CUSTOMER_EMAIL_COL}' tidak ditemukan di data pelanggan — "
-        "tidak bisa kirim notifikasi. Tambahkan kolom email di CSV pelanggan."
+        f"Column '{config.CUSTOMER_EMAIL_COL}' is not exist — "
+        "Fail to send notification. Add Email Column in CSV."
     )
 else:
     st.dataframe(
         df_alloc[[config.CUSTOMER_NAME_COL, config.CUSTOMER_EMAIL_COL, "FEEDER", "CURTAILMENT_AMOUNT_KW"]]
         .rename(columns={
-            config.CUSTOMER_NAME_COL: "Pelanggan",
+            config.CUSTOMER_NAME_COL: "Customer",
             config.CUSTOMER_EMAIL_COL: "Email",
-            "CURTAILMENT_AMOUNT_KW": "Target Curtailment (kW)",
+            "CURTAILMENT_AMOUNT_KW": "Curtailment Target(kW)",
         }),
         use_container_width=True,
         hide_index=True,
     )
 
-    if st.button("📧 Kirim Notifikasi ke Semua Pelanggan Terdampak", type="primary"):
+    if st.button("📧 Send Notification", type="primary"):
         try:
-            with st.spinner("Mengirim notifikasi..."):
+            with st.spinner("Sending Notification..."):
                 results = send_notifications(df_alloc, config.CUSTOMER_NAME_COL, selected_gi)
 
             success_count = sum(1 for r in results if r["success"])
-            st.success(f"Berhasil mengirim {success_count} dari {len(results)} notifikasi.")
+            st.success(f"Success {success_count} from {len(results)} notification.")
 
             failed = [r for r in results if not r["success"]]
             if failed:
-                st.error("Beberapa notifikasi gagal terkirim:")
+                st.error("Some notifications unable send:")
                 for r in failed:
                     st.write(f"- **{r['customer']}** ({r['email'] or 'tanpa email'}): {r['error']}")
         except KeyError as e:
             st.error(
-                "Konfigurasi notifikasi belum lengkap di Streamlit Secrets "
-                f"(bagian yang hilang: {e}). Lihat README.md untuk setup Gmail & Google Sheets."
+                "Configuration in streamlit is not complete "
+                f"(loss item: {e}). See README.md to setup Gmail & Google Sheets."
             )
         except Exception as e:
-            st.error(f"Gagal mengirim notifikasi: {e}")
+            st.error(f"Fail to send notification: {e}")
 
 st.divider()
 

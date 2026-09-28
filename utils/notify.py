@@ -33,32 +33,32 @@ def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float
     return f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #1a1a1a;">
-        <h2>⚡ Permintaan Demand Response — PLN</h2>
-        <p>Yth. <b>{customer_name}</b>,</p>
+        <h2>⚡ Demand Response Request — PLN</h2>
+        <p>Dear <b>{customer_name}</b>,</p>
         <p>
-            Sehubungan dengan kondisi beban pada feeder Anda saat ini, kami
-            mengajukan permintaan <b>pengurangan beban sementara (Demand Response)</b>
-            dengan rincian sebagai berikut:
+            Due to the current load condition on your feeder, we are requesting a
+            <b>temporary load reduction (Demand Response)</b> with the following
+            details:
         </p>
         <table style="border-collapse: collapse;">
-            <tr><td style="padding:4px 12px 4px 0;">Gardu Induk</td><td><b>{gi}</b></td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Substation</td><td><b>{gi}</b></td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Feeder</td><td><b>{feeder}</b></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">Target Pengurangan Daya</td><td><b>{target_kw:.2f} kW</b></td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Target Load Reduction</td><td><b>{target_kw:.2f} kW</b></td></tr>
         </table>
-        <p>Mohon konfirmasi kesediaan Anda dengan klik tombol di bawah ini:</p>
+        <p>Please confirm your availability by clicking the button below:</p>
         <p>
             <a href="{link}"
                style="background:#0068c9; color:#ffffff; padding:10px 20px;
                       text-decoration:none; border-radius:6px; display:inline-block;">
-                Buka Halaman Respons
+                Open Response Page
             </a>
         </p>
         <p style="font-size:12px; color:#666;">
-            Jika tombol di atas tidak berfungsi, salin tautan berikut ke browser Anda:<br>
+            If the button above doesn't work, copy this link into your browser:<br>
             {link}
         </p>
         <p style="font-size:12px; color:#666;">
-            Ini adalah simulasi Proof of Concept OpenADR — bukan permintaan operasional sungguhan.
+            This is an OpenADR Proof of Concept simulation — not an actual operational request.
         </p>
     </body>
     </html>
@@ -97,7 +97,7 @@ def send_notifications(df_alloc, customer_name_col: str, gi_name: str, email_col
         result = {"customer": customer_name, "email": email, "success": False, "error": None}
 
         if not email or email.lower() == "nan":
-            result["error"] = "Kolom EMAIL kosong untuk pelanggan ini."
+            result["error"] = "EMAIL column is empty for this customer."
             results.append(result)
             continue
 
@@ -119,7 +119,7 @@ def send_notifications(df_alloc, customer_name_col: str, gi_name: str, email_col
                 "responded_at": "",
             })
 
-            subject = f"[PLN ADR] Permintaan Pengurangan Beban — {feeder}"
+            subject = f"[PLN ADR] Load Reduction Request — {feeder}"
             body = _build_email_body(customer_name, gi_name, feeder, target_kw, link)
             send_email(email, subject, body)
 
