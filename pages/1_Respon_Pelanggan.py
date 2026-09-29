@@ -55,15 +55,22 @@ if status == "PENDING":
         "Please confirm your availability to carry out the load reduction "
         "according to the target above."
     )
-    col_a, col_b = st.columns(2)
+    col_a, col_b, col_c = st.columns(3)
     with col_a:
-        if st.button("✅ Accept", use_container_width=True, type="primary"):
-            if update_status(token, "ACCEPTED"):
-                st.success("Thank you! Your response (**ACCEPT**) has been recorded.")
+        if st.button("✅ Accept 100%", use_container_width=True, type="primary"):
+            if update_status(token, "ACCEPTED 100%"):
+                st.success("Thank you! Your response (**ACCEPT 100%**) has been recorded.")
                 st.rerun()
             else:
                 st.error("Failed to save your response. Please try again.")
     with col_b:
+        if st.button("✅ Accept 80%", use_container_width=True):
+            if update_status(token, "ACCEPTED 80%"):
+                st.warning("Your response (**ACCEPT 80%**) has been recorded.")
+                st.rerun()
+            else:
+                st.error("Failed to save your response. Please try again.")
+    with col_c:
         if st.button("❌ Decline", use_container_width=True):
             if update_status(token, "REJECTED"):
                 st.warning("Your response (**DECLINE**) has been recorded.")
@@ -71,8 +78,11 @@ if status == "PENDING":
             else:
                 st.error("Failed to save your response. Please try again.")
 
-elif status == "ACCEPTED":
-    st.success("You have **accepted** this request. Thank you for your participation.")
+elif status == "ACCEPTED 100%":
+    st.success("You have **accepted 100%** this request. Thank you for your participation.")
+
+elif status == "ACCEPTED 80%":
+    st.success("You have **accepted 80%** this request. Thank you for your participation.")
 
 elif status == "REJECTED":
     st.warning("You have **declined** this request.")
