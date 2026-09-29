@@ -36,16 +36,17 @@ def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float
         <h2>⚡ Demand Response Request — PLN</h2>
         <p>Dear <b>{customer_name}</b>,</p>
         <p>
-            Due to the current load condition on your feeder, we are requesting a
-            <b>temporary load reduction (Demand Response)</b> with the following
+            Due to the electrical condition, we request a
+            <b>Energy Reducement</b> with the following
             details:
         </p>
         <table style="border-collapse: collapse;">
-            <tr><td style="padding:4px 12px 4px 0;">Substation</td><td><b>{gi}</b></td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">Feeder</td><td><b>{feeder}</b></td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Target Load Reduction</td><td><b>{target_kw:.2f} kW</b></td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Estimated Duration</td><td><b>3 hours</b></td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Event Start</td><td><b>18:00</b></td></tr>
         </table>
-        <p>Please confirm your availability by clicking the button below:</p>
+        <p>Accepted full reducement will be received an <b>incentive</b>.</p>
+        <p>Please confirm your availability by clicking the button cebelow:</p>
         <p>
             <a href="{link}"
                style="background:#0068c9; color:#ffffff; padding:10px 20px;
@@ -58,7 +59,7 @@ def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float
             {link}
         </p>
         <p style="font-size:12px; color:#666;">
-            This is an OpenADR Proof of Concept simulation — not an actual operational request.
+            If we do not receive your response within 30 minutes, the request is treated as accepted.
         </p>
     </body>
     </html>
