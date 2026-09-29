@@ -50,6 +50,7 @@ SHEET_HEADERS = [
     "target_curtailment_kw",
     "status",
     "responded_at",
+    "responded_kw",
 ]
 
 
@@ -90,8 +91,13 @@ def get_request_by_token(token: str) -> dict | None:
     return None
 
 
-def update_status(token: str, new_status: str) -> bool:
-    """Update status (ACCEPTED/REJECTED) untuk 1 token. True kalau berhasil ketemu."""
+def update_status(token: str, new_status: str, responded_kw: float | None = None) -> bool:
+    """
+    Update status (mis. ACCEPTED 100%/ACCEPTED 80%/REJECTED) untuk 1 token.
+    responded_kw (opsional): besaran kW aktual yang disetujui pelanggan
+    (mis. 80% dari target_curtailment_kw kalau pelanggan pilih "Accept 80%").
+    True kalau berhasil ketemu.
+    """
     worksheet = _get_worksheet()
     cell = worksheet.find(token, in_column=1)
     if cell is None:
@@ -103,4 +109,23 @@ def update_status(token: str, new_status: str) -> bool:
 
     worksheet.update_cell(cell.row, status_col, new_status)
     worksheet.update_cell(cell.row, responded_col, responded_at)
+
+    if responded_kw is not None and "responded_kw" in SHEET_HEADERS:
+        responded_kw_col = SHEET_HEADERS.index("responded_kw") + 1
+        worksheet.update_cell(cell.row, responded_kw_col, round(responded_kw, 2))
+
     return True
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def get_all_requests(gi_name: str | None = None) -> list[dict]:
+    """
+    Ambil semua baris permintaan (dipakai untuk rekap respons pelanggan di dashboard).
+    Kalau gi_name diisi, hanya baris untuk gardu induk tersebut yang dikembalikan.
+    Di-cache 15 detik supaya tidak terlalu sering panggil Google Sheets API.
+    """
+    worksheet = _get_worksheet()
+    records = worksheet.get_all_records()
+    if gi_name:
+        records = [r for r in records if str(r.get("gi", "")) == gi_name]
+    return records

@@ -44,7 +44,8 @@ with col1:
 with col2:
     st.metric("Feeder", request["feeder"])
 
-st.metric("Target Load Reduction", f"{float(request['target_curtailment_kw']):.2f} kW")
+target_kw = float(request["target_curtailment_kw"])
+st.metric("Target Load Reduction", f"{target_kw:.2f} kW")
 
 status = str(request.get("status", "PENDING")).upper()
 
@@ -58,21 +59,21 @@ if status == "PENDING":
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         if st.button("✅ Accept 100%", use_container_width=True, type="primary"):
-            if update_status(token, "ACCEPTED 100%"):
+            if update_status(token, "ACCEPTED 100%", responded_kw=target_kw):
                 st.success("Thank you! Your response (**ACCEPT 100%**) has been recorded.")
                 st.rerun()
             else:
                 st.error("Failed to save your response. Please try again.")
     with col_b:
         if st.button("✅ Accept 80%", use_container_width=True):
-            if update_status(token, "ACCEPTED 80%"):
+            if update_status(token, "ACCEPTED 80%", responded_kw=target_kw * 0.8):
                 st.warning("Your response (**ACCEPT 80%**) has been recorded.")
                 st.rerun()
             else:
                 st.error("Failed to save your response. Please try again.")
     with col_c:
         if st.button("❌ Decline", use_container_width=True):
-            if update_status(token, "REJECTED"):
+            if update_status(token, "REJECTED", responded_kw=0.0):
                 st.warning("Your response (**DECLINE**) has been recorded.")
                 st.rerun()
             else:
@@ -80,9 +81,11 @@ if status == "PENDING":
 
 elif status == "ACCEPTED 100%":
     st.success("You have **accepted 100%** this request. Thank you for your participation.")
+    st.caption(f"Confirmed load reduction: **{target_kw:.2f} kW**")
 
 elif status == "ACCEPTED 80%":
     st.success("You have **accepted 80%** this request. Thank you for your participation.")
+    st.caption(f"Confirmed load reduction: **{target_kw * 0.8:.2f} kW** (80% of {target_kw:.2f} kW)")
 
 elif status == "REJECTED":
     st.warning("You have **declined** this request.")

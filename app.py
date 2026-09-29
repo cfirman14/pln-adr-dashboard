@@ -14,6 +14,7 @@ from utils.threshold import run_threshold_check, run_dr_trigger_check
 from utils.curtailment import allocate_customer_curtailment
 from utils.openadr_events import build_all_events
 from utils.notify import send_notifications
+from utils.sheets import get_all_requests
 
 st.set_page_config(page_title="DR Dashboard — OpenADR PoC", layout="wide")
 
@@ -194,7 +195,80 @@ else:
 st.divider()
 
 # ============================================================
-# SECTION 5 — OpenADR Events (simulasi)
+# SECTION 5 — Customer Response Summary
+# ============================================================
+st.subheader("Customer Response Summary")
+
+col_refresh, _ = st.columns([1, 5])
+with col_refresh:
+    if st.button("🔄 Refresh"):
+        get_all_requests.clear()
+
+try:
+    requests = get_all_requests(selected_gi)
+except KeyError as e:
+    requests = None
+    st.info(
+        "Google Sheets is not configured yet, so responses can't be shown "
+        f"(missing config: {e}). See README.md for setup."
+    )
+except Exception as e:
+    requests = None
+    st.warning(f"Failed to fetch responses from Google Sheets: {e}")
+
+if requests is not None:
+    if not requests:
+        st.info("No notification has been sent yet for this substation.")
+    else:
+        pending = [r for r in requests if str(r.get("status", "")).upper() == "PENDING"]
+        accepted_100 = [r for r in requests if str(r.get("status", "")).upper() == "ACCEPTED 100%"]
+        accepted_80 = [r for r in requests if str(r.get("status", "")).upper() == "ACCEPTED 80%"]
+        rejected = [r for r in requests if str(r.get("status", "")).upper() == "REJECTED"]
+
+        confirmed_kw = sum(
+            float(r.get("responded_kw") or 0)
+            for r in requests
+            if str(r.get("status", "")).upper() in ("ACCEPTED 100%", "ACCEPTED 80%")
+        )
+        pending_kw = sum(float(r.get("target_curtailment_kw") or 0) for r in pending)
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("⏳ Pending", len(pending))
+        m2.metric("✅ Accepted 100%", len(accepted_100))
+        m3.metric("✅ Accepted 80%", len(accepted_80))
+        m4.metric("❌ Rejected", len(rejected))
+
+        st.caption(
+            f"Confirmed load reduction so far: **{confirmed_kw:.2f} kW** "
+            f"(still pending: {pending_kw:.2f} kW awaiting response)"
+        )
+
+        df_requests = pd.DataFrame(requests)
+        display_cols = [
+            "feeder", "customer_name", "email",
+            "target_curtailment_kw", "status", "responded_kw",
+            "sent_at", "responded_at",
+        ]
+        display_cols = [c for c in display_cols if c in df_requests.columns]
+        st.dataframe(
+            df_requests[display_cols].rename(columns={
+                "feeder": "Feeder",
+                "customer_name": "Customer",
+                "email": "Email",
+                "target_curtailment_kw": "Target (kW)",
+                "status": "Status",
+                "responded_kw": "Confirmed (kW)",
+                "sent_at": "Sent At",
+                "responded_at": "Responded At",
+            }),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+st.divider()
+
+# ============================================================
+# SECTION 6 — OpenADR Events (simulasi)
 # ============================================================
 st.subheader("OpenADR 3.0 Events (Simulation)")
 
