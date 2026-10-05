@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 
 import streamlit as st
 
+from utils.idpel import ID_COL, clean_idpel
 from utils.sheets import append_request
 from utils.tokens import generate_token
 
@@ -116,6 +117,7 @@ def send_notifications(df_alloc, customer_name_col: str, gi_name: str, email_col
         feeder = row["FEEDER"]
         target_kw = float(row["CURTAILMENT_AMOUNT_KW"])
         email = str(row.get(email_col, "")).strip()
+        idpel = clean_idpel(row.get(ID_COL, ""))
 
         result = {"customer": customer_name, "email": email, "success": False, "error": None}
 
@@ -143,6 +145,7 @@ def send_notifications(df_alloc, customer_name_col: str, gi_name: str, email_col
                 "responded_kw": "",
                 "iteration": 1,
                 "campaign_id": sent_at,
+                "idpel": idpel,
             })
 
             subject = f"[PLN ADR] Load Reduction Request — {feeder}"

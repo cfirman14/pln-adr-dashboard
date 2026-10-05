@@ -119,14 +119,18 @@ def load_requests(selected_gi: str):
 PERIOD_KEY = "period_range"
 
 
-def period_filter(requests: list[dict]):
+def period_filter(requests: list[dict], prefix: str = "period"):
     """
     Pemilih periode (rentang tanggal EVENT, WIB) untuk halaman Notifikasi & Reward/Penalty.
     Tanggal event = tanggal iterasi 1 (iterasi 2 yang lewat tengah malam tetap ikut event awalnya).
     Default: hari terakhir yang punya data. Pilihan ikut terbawa antar halaman (key yang sama).
 
+    prefix: awalan key widget; halaman berbeda (mis. portal pelanggan) memakai prefix sendiri
+    supaya pilihannya tidak tercampur dengan halaman PLN.
+
     Return (baris_dalam_periode, (tanggal_mulai, tanggal_akhir) atau None kalau data tak punya tanggal).
     """
+    range_key = f"{prefix}_range"
     annotated = annotate_events(requests)
     bounds = date_bounds(annotated)
     if bounds is None:
@@ -135,28 +139,28 @@ def period_filter(requests: list[dict]):
     lo, hi = bounds
     max_day = max(hi, today_local())
 
-    current = st.session_state.get(PERIOD_KEY)
+    current = st.session_state.get(range_key)
     valid = (
         isinstance(current, (tuple, list)) and 1 <= len(current) <= 2
         and all(isinstance(d, dt.date) and lo <= d <= max_day for d in current)
     )
     if not valid:
-        st.session_state[PERIOD_KEY] = (hi, hi)
+        st.session_state[range_key] = (hi, hi)
 
     col_date, col_quick = st.columns([2, 3], vertical_alignment="bottom")
     # Tombol cepat diproses SEBELUM date_input dibuat (boleh mengubah nilainya di run yang sama).
     with col_quick:
         q1, q2, q3 = st.columns(3)
-        if q1.button("Latest day", use_container_width=True, key="period_latest"):
-            st.session_state[PERIOD_KEY] = (hi, hi)
-        if q2.button("Last 7 days", use_container_width=True, key="period_week"):
-            st.session_state[PERIOD_KEY] = (max(lo, hi - dt.timedelta(days=6)), hi)
-        if q3.button("All dates", use_container_width=True, key="period_all"):
-            st.session_state[PERIOD_KEY] = (lo, hi)
+        if q1.button("Latest day", use_container_width=True, key=f"{prefix}_latest"):
+            st.session_state[range_key] = (hi, hi)
+        if q2.button("Last 7 days", use_container_width=True, key=f"{prefix}_week"):
+            st.session_state[range_key] = (max(lo, hi - dt.timedelta(days=6)), hi)
+        if q3.button("All dates", use_container_width=True, key=f"{prefix}_all"):
+            st.session_state[range_key] = (lo, hi)
     with col_date:
         picked = st.date_input(
             "Period (event date, WIB)", min_value=lo, max_value=max_day,
-            key=PERIOD_KEY, format="DD/MM/YYYY",
+            key=range_key, format="DD/MM/YYYY",
         )
 
     picked = picked if isinstance(picked, (tuple, list)) else (picked,)

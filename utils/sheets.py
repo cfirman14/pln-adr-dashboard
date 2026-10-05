@@ -53,6 +53,7 @@ SHEET_HEADERS = [
     "responded_kw",
     "iteration",
     "campaign_id",
+    "idpel",
 ]
 
 
@@ -71,7 +72,7 @@ def _get_worksheet():
     # Pastikan header sudah benar (cuma diisi sekali kalau sheet masih kosong)
     first_row = worksheet.row_values(1)
     if first_row != SHEET_HEADERS:
-        worksheet.update("A1", [SHEET_HEADERS])
+        worksheet.update(range_name="A1", values=[SHEET_HEADERS])
 
     return worksheet
 

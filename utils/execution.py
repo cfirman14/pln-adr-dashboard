@@ -22,6 +22,7 @@ Mengikuti flowchart "Execution of ADR":
 
 import datetime as dt
 
+from utils.idpel import ID_COL, clean_idpel
 from utils.notify import _build_email_body, _build_response_link, send_email
 from utils.period import current_per_customer
 from utils.sheets import append_request, get_all_requests, update_status
@@ -149,6 +150,7 @@ def run_next_iteration(gi_name: str, feeder: str, df_alloc, customer_name_col: s
         customer_name = row[customer_name_col]
         target_kw = float(row["CURTAILMENT_AMOUNT_KW"])
         email = str(row.get(email_col, "")).strip()
+        idpel = clean_idpel(row.get(ID_COL, ""))
         next_iteration = iteration_by_customer.get(customer_name, 1) + 1
 
         token = generate_token()
@@ -177,6 +179,7 @@ def run_next_iteration(gi_name: str, feeder: str, df_alloc, customer_name_col: s
                 "responded_kw": "",
                 "iteration": next_iteration,
                 "campaign_id": sent_at,
+                "idpel": idpel,
             })
 
             subject = f"[PLN ADR] Load Reduction Request (Follow-up {next_iteration}) — {feeder}"

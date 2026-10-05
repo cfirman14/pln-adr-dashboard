@@ -51,6 +51,7 @@ def get_latest_snapshot(df: pd.DataFrame, gi_name: str) -> dict:
 
 def load_customer_data(uploaded_file=None, default_path: str = "data/DataCustomer.csv"):
     source = uploaded_file if uploaded_file is not None else default_path
-    df = pd.read_csv(source)
+    # IDPEL dibaca sebagai teks (12 digit; jangan jadi angka/float, nol di depan tidak boleh hilang)
+    df = pd.read_csv(source, dtype={"IDPEL": str})
     df.columns = [col.strip() for col in df.columns]
     return df
