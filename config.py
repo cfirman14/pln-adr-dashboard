@@ -9,7 +9,7 @@ Titik ganti tunggal kalau project ini dipakai untuk GI/feeder lain.
 FEEDER_DATA_FILE = "Feeder.csv"
 
 # Kapasitas & threshold
-MAX_PER_FEEDER_KW = 500       # kW, kapasitas maksimal per feeder
+MAX_PER_FEEDER_KW = 8500       # kW, kapasitas maksimal per feeder (10kVA dikali 0.85 PF)
 TRIGGER_RATIO = 0.80          # ambang trigger (80%)
 SAFE_TARGET_RATIO = 0.80      # target aman setelah curtailment
 

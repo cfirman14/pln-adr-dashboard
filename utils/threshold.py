@@ -18,11 +18,13 @@ def run_threshold_check(feeder_data: dict, max_per_feeder: float, trigger_ratio:
     total_power_active = sum(d["power_active"] for d in feeder_data.values())
     n_feeder = len(feeder_data)
     max_total = max_per_feeder * n_feeder
+    gi_capacity = max_total / 0.85 / 1000    # MVA, hanya untuk tampilan
     total_status, total_loading_pct = check_status(total_power_active, max_total, trigger_ratio)
 
     return {
         "total_power_active": total_power_active,
         "max_total": max_total,
+        "gi_capacity": gi_capacity,
         "total_status": total_status,
         "total_loading_pct": total_loading_pct,
     }

@@ -29,15 +29,28 @@ def _build_response_link(token: str) -> str:
     return f"{base_url}/Respon_Pelanggan?token={token}"
 
 
-def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float, link: str) -> str:
+def _build_email_body(
+    customer_name: str, gi: str, feeder: str, target_kw: float, link: str, iteration: int = 1
+) -> str:
+    followup_note = ""
+    if iteration > 1:
+        followup_note = f"""
+        <p style="background:#fff3cd; padding:10px 14px; border-radius:6px; border:1px solid #ffe69c;">
+            <b>Follow-up Request (Iteration {iteration}):</b> Your previous response declined
+            this request. Based on the current grid condition, we are requesting again with
+            an adjusted target below.
+        </p>
+        """
+
     return f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #1a1a1a;">
         <h2>⚡ Demand Response Request — PLN</h2>
+        {followup_note}
         <p>Dear <b>{customer_name}</b>,</p>
         <p>
-            Due to the electrical condition, we request a
-            <b>Energy Reducement</b> with the following
+            Due to the electrical condition, we request an
+            <b>Energy Reduction</b> with the following
             details:
         </p>
         <table style="border-collapse: collapse;">
@@ -45,8 +58,8 @@ def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float
             <tr><td style="padding:4px 12px 4px 0;">Estimated Duration</td><td><b>3 hours</b></td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Event Start</td><td><b>18:00</b></td></tr>
         </table>
-        <p>Accepted full reducement will be received an <b>incentive</b>.</p>
-        <p>Please confirm your availability by clicking the button cebelow:</p>
+        <p>Accepted full reduction will be received an <b>incentive</b>.</p>
+        <p>Please confirm your availability by clicking the button below:</p>
         <p>
             <a href="{link}"
                style="background:#0068c9; color:#ffffff; padding:10px 20px;
@@ -59,7 +72,8 @@ def _build_email_body(customer_name: str, gi: str, feeder: str, target_kw: float
             {link}
         </p>
         <p style="font-size:12px; color:#666;">
-            If we do not receive your response within 30 minutes, the request is treated as accepted.
+            If we do not receive your response within 30 minutes, the request is automatically
+            treated as accepted (100%).
         </p>
     </body>
     </html>
@@ -118,6 +132,9 @@ def send_notifications(df_alloc, customer_name_col: str, gi_name: str, email_col
                 "target_curtailment_kw": round(target_kw, 2),
                 "status": "PENDING",
                 "responded_at": "",
+                "responded_kw": "",
+                "iteration": 1,
+                "campaign_id": sent_at,
             })
 
             subject = f"[PLN ADR] Load Reduction Request — {feeder}"

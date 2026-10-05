@@ -44,7 +44,7 @@ def get_latest_snapshot(df: pd.DataFrame, gi_name: str) -> dict:
         feeder_data[row["Feeder"]] = {
             "date": row["Timestamp"].strftime("%d-%m-%Y"),
             "time": row["Timestamp"].strftime("%H:%M:%S"),
-            "power_active": float(row["Power Active"]),
+            "power_active": float(row["Power Active"])/1000,
         }
     return feeder_data
 

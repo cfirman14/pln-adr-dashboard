@@ -8,6 +8,7 @@ satu-satunya ke permintaan curtailment milik mereka.
 
 import streamlit as st
 
+from utils.execution import resolve_if_expired
 from utils.sheets import get_request_by_token, update_status
 
 st.set_page_config(page_title="Demand Response — PLN", layout="centered")
@@ -34,6 +35,10 @@ except Exception as e:
 if request is None:
     st.error("Request not found. The link may no longer be valid.")
     st.stop()
+
+# Kalau sudah lewat 30 menit sejak dikirim dan belum direspons, otomatis
+# dianggap ACCEPTED 100% sebelum ditampilkan ke pelanggan.
+request = resolve_if_expired(token, request)
 
 st.divider()
 st.subheader(f"Dear {request['customer_name']}")
@@ -86,6 +91,13 @@ elif status == "ACCEPTED 100%":
 elif status == "ACCEPTED 80%":
     st.success("You have **accepted 80%** this request. Thank you for your participation.")
     st.caption(f"Confirmed load reduction: **{target_kw * 0.8:.2f} kW** (80% of {target_kw:.2f} kW)")
+
+elif status == "ACCEPTED 100% (AUTO)":
+    st.info(
+        "No response was received within 30 minutes, so this request was "
+        "automatically accepted at 100% per the Demand Response policy."
+    )
+    st.caption(f"Confirmed load reduction: **{target_kw:.2f} kW**")
 
 elif status == "REJECTED":
     st.warning("You have **declined** this request.")

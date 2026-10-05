@@ -15,6 +15,7 @@ from utils.curtailment import allocate_customer_curtailment
 from utils.openadr_events import build_all_events
 from utils.notify import send_notifications
 from utils.sheets import get_all_requests
+from utils.execution import resolve_expired_requests, latest_per_customer, run_next_iteration
 
 st.set_page_config(page_title="DR Dashboard — OpenADR PoC", layout="wide")
 
@@ -38,7 +39,7 @@ except Exception as e:
     st.stop()
 
 # ---------- Choose Substation ----------
-gi_list = sorted(df_feeder_raw["GI"].unique())
+gi_list = sorted(df_feeder_raw["GI"].dropna().astype(str).str.strip().unique())
 selected_gi = st.sidebar.selectbox("Choose Substation", gi_list)
 
 st.sidebar.divider()
@@ -90,7 +91,7 @@ with cols[-1]:
         value=f"{summary['total_power_active']:.2f} kW",
         delta=f"Loading {summary['total_loading_pct']:.1f}%",
     )
-    st.caption(f"Max total: {summary['max_total']:.0f} kW")
+    st.caption(f"Trafo Capacity: {summary['gi_capacity']:.0f} MVA")
 
 st.divider()
 
@@ -103,7 +104,7 @@ df_dr = pd.DataFrame(
     [
         {
             "Feeder": name,
-            "Power Active (kW)": r["power_active"],
+            "Power Active (kW)": round(r["power_active"], 2),
             "Loading (%)": round(r["loading_pct"], 1),
             "Status": r["dr_status"],
             "Target Curtailment (kW)": round(r["target_curtailment_kw"], 2),
@@ -133,6 +134,7 @@ try:
             with st.expander(f"{feeder_name} — {subset['CURTAILMENT_AMOUNT_KW'].sum():.2f} kW", expanded=True):
                 st.dataframe(
                     subset[[config.CUSTOMER_NAME_COL, "ACTIVE_POWER_TOTAL", "CURTAILMENT_AMOUNT_KW"]]
+                    .round(2)
                     .rename(columns={
                         config.CUSTOMER_NAME_COL: "Pelanggan",
                         "ACTIVE_POWER_TOTAL": "Power Aktif (kW)",
@@ -162,6 +164,7 @@ elif config.CUSTOMER_EMAIL_COL not in df_alloc.columns:
 else:
     st.dataframe(
         df_alloc[[config.CUSTOMER_NAME_COL, config.CUSTOMER_EMAIL_COL, "FEEDER", "CURTAILMENT_AMOUNT_KW"]]
+        .round(2)
         .rename(columns={
             config.CUSTOMER_NAME_COL: "Customer",
             config.CUSTOMER_EMAIL_COL: "Email",
@@ -205,6 +208,9 @@ with col_refresh:
         get_all_requests.clear()
 
 try:
+    # Auto-resolve any PENDING request older than 30 minutes (no response = accepted 100%)
+    # before showing the summary — this is the "lazy" check since this PoC has no background job.
+    resolve_expired_requests(selected_gi)
     requests = get_all_requests(selected_gi)
 except KeyError as e:
     requests = None
@@ -220,32 +226,38 @@ if requests is not None:
     if not requests:
         st.info("No notification has been sent yet for this substation.")
     else:
-        pending = [r for r in requests if str(r.get("status", "")).upper() == "PENDING"]
-        accepted_100 = [r for r in requests if str(r.get("status", "")).upper() == "ACCEPTED 100%"]
-        accepted_80 = [r for r in requests if str(r.get("status", "")).upper() == "ACCEPTED 80%"]
-        rejected = [r for r in requests if str(r.get("status", "")).upper() == "REJECTED"]
+        # Status "saat ini" per pelanggan (kalau pernah dikirimi lebih dari 1 kali,
+        # ambil yang iterasinya paling tinggi / paling baru).
+        latest = latest_per_customer(requests)
+
+        pending = [r for r in latest if str(r.get("status", "")).upper() == "PENDING"]
+        accepted_100 = [r for r in latest if str(r.get("status", "")).upper() == "ACCEPTED 100%"]
+        accepted_80 = [r for r in latest if str(r.get("status", "")).upper() == "ACCEPTED 80%"]
+        auto_accepted = [r for r in latest if str(r.get("status", "")).upper() == "ACCEPTED 100% (AUTO)"]
+        rejected = [r for r in latest if str(r.get("status", "")).upper() == "REJECTED"]
 
         confirmed_kw = sum(
             float(r.get("responded_kw") or 0)
-            for r in requests
-            if str(r.get("status", "")).upper() in ("ACCEPTED 100%", "ACCEPTED 80%")
+            for r in latest
+            if str(r.get("status", "")).upper().startswith("ACCEPTED")
         )
         pending_kw = sum(float(r.get("target_curtailment_kw") or 0) for r in pending)
 
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("⏳ Pending", len(pending))
         m2.metric("✅ Accepted 100%", len(accepted_100))
         m3.metric("✅ Accepted 80%", len(accepted_80))
-        m4.metric("❌ Rejected", len(rejected))
+        m4.metric("⌛ Auto-accepted", len(auto_accepted))
+        m5.metric("❌ Rejected", len(rejected))
 
         st.caption(
-            f"Confirmed load reduction so far: **{confirmed_kw:.2f} kW** "
+            f"Confirmed load reduction so far (latest response per customer): **{confirmed_kw:.2f} kW** "
             f"(still pending: {pending_kw:.2f} kW awaiting response)"
         )
 
         df_requests = pd.DataFrame(requests)
         display_cols = [
-            "feeder", "customer_name", "email",
+            "feeder", "customer_name", "email", "iteration",
             "target_curtailment_kw", "status", "responded_kw",
             "sent_at", "responded_at",
         ]
@@ -255,6 +267,7 @@ if requests is not None:
                 "feeder": "Feeder",
                 "customer_name": "Customer",
                 "email": "Email",
+                "iteration": "Iteration",
                 "target_curtailment_kw": "Target (kW)",
                 "status": "Status",
                 "responded_kw": "Confirmed (kW)",
@@ -264,6 +277,35 @@ if requests is not None:
             use_container_width=True,
             hide_index=True,
         )
+        st.caption("Table above shows full history. Metrics above use each customer's latest response only.")
+
+        feeders_with_rejection = sorted({r["feeder"] for r in rejected})
+        if feeders_with_rejection:
+            if df_alloc.empty:
+                st.info(
+                    "Some customers declined previously, but the feeder is currently NORMAL "
+                    "(no active curtailment need), so there is nothing to re-send right now."
+                )
+            else:
+                st.markdown("**Feeders with declined customers — re-run iteration using the current allocation:**")
+                for feeder_name in feeders_with_rejection:
+                    if st.button(f"🔁 Run Next Iteration — {feeder_name}", key=f"iter_{feeder_name}"):
+                        with st.spinner(f"Sending follow-up notification for {feeder_name}..."):
+                            outcome = run_next_iteration(
+                                selected_gi, feeder_name, df_alloc, config.CUSTOMER_NAME_COL
+                            )
+
+                        if outcome["sent"]:
+                            success_n = sum(1 for r in outcome["sent"] if r["success"])
+                            st.success(f"{outcome['message']} ({success_n}/{len(outcome['sent'])} email sent successfully)")
+                            failed = [r for r in outcome["sent"] if not r["success"]]
+                            for r in failed:
+                                st.error(f"- **{r['customer']}** ({r['email'] or 'no email'}): {r['error']}")
+                        else:
+                            st.info(outcome["message"])
+
+                        get_all_requests.clear()
+                        st.rerun()
 
 st.divider()
 

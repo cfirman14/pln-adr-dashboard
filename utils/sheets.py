@@ -51,6 +51,8 @@ SHEET_HEADERS = [
     "status",
     "responded_at",
     "responded_kw",
+    "iteration",
+    "campaign_id",
 ]
 
 
