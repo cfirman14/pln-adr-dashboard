@@ -131,3 +131,82 @@ def get_all_requests(gi_name: str | None = None) -> list[dict]:
     if gi_name:
         records = [r for r in records if str(r.get("gi", "")) == gi_name]
     return records
+
+
+# ============================================================
+# Sheet ke-2: Reward_Penalty (spreadsheet yang sama, tab berbeda)
+# ============================================================
+SETTLEMENT_SHEET_NAME = "Reward_Penalty"
+
+SETTLEMENT_HEADERS = [
+    "key",
+    "calculated_at",
+    "type",
+    "gi",
+    "feeder",
+    "customer_name",
+    "email",
+    "basis_token",
+    "iteration",
+    "power_kw",
+    "duration_hours",
+    "duration_text",
+    "energy_kwh",
+    "rate_idr_per_kwh",
+    "factor",
+    "amount_idr",
+    "formula",
+]
+
+
+def _get_settlement_worksheet():
+    """Ambil tab Reward_Penalty; dibuat otomatis (+ header) kalau belum ada."""
+    client = _get_client()
+    spreadsheet = client.open_by_key(st.secrets["app"]["sheet_id"])
+    try:
+        worksheet = spreadsheet.worksheet(SETTLEMENT_SHEET_NAME)
+    except gspread.WorksheetNotFound:
+        worksheet = spreadsheet.add_worksheet(
+            title=SETTLEMENT_SHEET_NAME, rows=1000, cols=len(SETTLEMENT_HEADERS)
+        )
+
+    if worksheet.row_values(1) != SETTLEMENT_HEADERS:
+        worksheet.update(range_name="A1", values=[SETTLEMENT_HEADERS])
+    return worksheet
+
+
+def upsert_settlements(rows: list[dict]) -> dict:
+    """
+    Simpan hasil perhitungan reward/penalty. Kunci baris = kolom "key"
+    (jenis + token baris dasar), jadi menyimpan ulang dengan durasi/tarif baru
+    MENIMPA baris yang sama, bukan menambah duplikat.
+    Return {"added": n, "updated": n}.
+    """
+    worksheet = _get_settlement_worksheet()
+    existing_keys = worksheet.col_values(1)          # termasuk header di indeks 0
+    row_by_key = {k: i + 1 for i, k in enumerate(existing_keys) if i > 0 and k}
+
+    to_append, updated = [], 0
+    for row in rows:
+        values = [row.get(col, "") for col in SETTLEMENT_HEADERS]
+        sheet_row = row_by_key.get(row["key"])
+        if sheet_row:
+            worksheet.update(range_name=f"A{sheet_row}", values=[values], raw=True)
+            updated += 1
+        else:
+            to_append.append(values)
+
+    if to_append:
+        worksheet.append_rows(to_append, value_input_option="RAW")
+
+    get_all_settlements.clear()
+    return {"added": len(to_append), "updated": updated}
+
+
+@st.cache_data(ttl=15, show_spinner=False)
+def get_all_settlements(gi_name: str | None = None) -> list[dict]:
+    """Baca semua baris tab Reward_Penalty (opsional difilter per GI)."""
+    records = _get_settlement_worksheet().get_all_records()
+    if gi_name:
+        records = [r for r in records if str(r.get("gi", "")) == gi_name]
+    return records

@@ -8,7 +8,7 @@ satu-satunya ke permintaan curtailment milik mereka.
 
 import streamlit as st
 
-from utils.execution import resolve_if_expired
+from utils.execution import resolve_if_expired, MAX_ITERATIONS
 from utils.sheets import get_request_by_token, update_status
 
 st.set_page_config(page_title="Demand Response — PLN", layout="centered")
@@ -57,6 +57,8 @@ status = str(request.get("status", "PENDING")).upper()
 st.divider()
 
 if status == "PENDING":
+    if int(request.get("iteration") or 1) >= MAX_ITERATIONS:
+        st.warning("**Final round:** if you decline now, no further request will be sent.")
     st.info(
         "Please confirm your availability to carry out the load reduction "
         "according to the target above."
@@ -100,7 +102,13 @@ elif status == "ACCEPTED 100% (AUTO)":
     st.caption(f"Confirmed load reduction: **{target_kw:.2f} kW**")
 
 elif status == "REJECTED":
-    st.warning("You have **declined** this request.")
+    if int(request.get("iteration") or 1) >= MAX_ITERATIONS:
+        st.error(
+            "You have **declined** this request. This was the final round, so your "
+            "response is recorded as a **final rejection**."
+        )
+    else:
+        st.warning("You have **declined** this request.")
 
 else:
     st.info(f"Request status: {status}")

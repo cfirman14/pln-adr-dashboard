@@ -13,6 +13,12 @@ MAX_PER_FEEDER_KW = 8500       # kW, kapasitas maksimal per feeder (10kVA dikali
 TRIGGER_RATIO = 0.80          # ambang trigger (80%)
 SAFE_TARGET_RATIO = 0.80      # target aman setelah curtailment
 
+#Reward and Penalty
+C_AVOIDABLE_IDR_PER_KWH = 59723   # IDR/kWh, avoided marginal generation cost (dasar insentif)
+C_ENERGY_IDR_PER_KWH = 59723      # IDR/kWh, PLN energy production/purchase cost (dasar penalty)
+INCENTIVE_SHARE = 1 / 3
+PENALTY_RATIO = 0.80
+
 # Data pelanggan
 CUSTOMER_FILE = "DataCustomer.csv"
 CUSTOMER_NAME_COL = "NAMA_PELANGGAN"

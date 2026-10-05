@@ -15,6 +15,9 @@ Mengikuti flowchart "Execution of ADR":
    curtailment dari alokasi TERKINI (bukan angka lama yang tersimpan waktu
    notifikasi pertama dikirim) — supaya selalu mencerminkan kondisi grid
    paling baru. Iterasi dipicu manual oleh operator, bukan otomatis.
+4. Iterasi dibatasi MAKSIMAL 2 putaran (MAX_ITERATIONS). Kalau pelanggan
+   masih Decline di iterasi ke-2, TIDAK ada iterasi ke-3: statusnya final
+   REJECTED. Status final inilah yang nantinya jadi dasar penalti.
 """
 
 import datetime as dt
@@ -24,6 +27,7 @@ from utils.sheets import append_request, get_all_requests, update_status
 from utils.tokens import generate_token
 
 RESPONSE_TIMEOUT_MINUTES = 30
+MAX_ITERATIONS = 2   # putaran ke-2 adalah yang terakhir; tidak ada iterasi ke-3
 
 
 def _is_expired(sent_at: str, timeout_minutes: int = RESPONSE_TIMEOUT_MINUTES) -> bool:
@@ -96,6 +100,25 @@ def latest_per_customer(requests: list[dict]) -> list[dict]:
     return list(latest.values())
 
 
+def _iteration_of(r: dict) -> int:
+    try:
+        return int(r.get("iteration") or 1)
+    except (ValueError, TypeError):
+        return 1
+
+
+def split_rejected(latest: list[dict]) -> tuple[list[dict], list[dict]]:
+    """
+    Pisahkan pelanggan REJECTED (status terkini) jadi dua kelompok:
+    - retryable : REJECTED di iterasi < MAX_ITERATIONS -> masih boleh di-iterasi lagi
+    - final     : REJECTED di iterasi >= MAX_ITERATIONS -> penolakan final (dasar penalti)
+    """
+    rejected = [r for r in latest if str(r.get("status", "")).upper() == "REJECTED"]
+    retryable = [r for r in rejected if _iteration_of(r) < MAX_ITERATIONS]
+    final = [r for r in rejected if _iteration_of(r) >= MAX_ITERATIONS]
+    return retryable, final
+
+
 def run_next_iteration(gi_name: str, feeder: str, df_alloc, customer_name_col: str, email_col: str = "EMAIL") -> dict:
     """
     Kirim ulang notifikasi untuk 1 feeder, HANYA ke pelanggan yang status
@@ -112,8 +135,15 @@ def run_next_iteration(gi_name: str, feeder: str, df_alloc, customer_name_col: s
     feeder_requests = [r for r in all_requests if r.get("feeder") == feeder]
     latest = latest_per_customer(feeder_requests)
 
-    rejected_names = {r["customer_name"] for r in latest if str(r.get("status", "")).upper() == "REJECTED"}
+    retryable, final = split_rejected(latest)
+    rejected_names = {r["customer_name"] for r in retryable}
     if not rejected_names:
+        if final:
+            return {
+                "sent": [],
+                "message": f"Maximum of {MAX_ITERATIONS} iterations reached. "
+                           f"{len(final)} customer(s) remain REJECTED (final) — no further iteration.",
+            }
         return {"sent": [], "message": "No customer to re-notify (no one has declined in the latest round)."}
 
     subset = df_alloc[(df_alloc["FEEDER"] == feeder) & (df_alloc[customer_name_col].isin(rejected_names))]
@@ -124,7 +154,7 @@ def run_next_iteration(gi_name: str, feeder: str, df_alloc, customer_name_col: s
                        "(the feeder may now be back to NORMAL).",
         }
 
-    iteration_by_customer = {r["customer_name"]: int(r.get("iteration") or 1) for r in latest}
+    iteration_by_customer = {r["customer_name"]: _iteration_of(r) for r in latest}
 
     sent_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     results = []

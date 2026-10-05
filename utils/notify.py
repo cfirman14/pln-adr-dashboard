@@ -79,8 +79,16 @@ def _build_email_body(
     </html>
     """
 
+def _email_enabled() -> bool:        # ← baru, di atas send_email
+    try:
+        return bool(st.secrets["app"].get("send_email", True))
+    except Exception:
+        return True
 
 def send_email(to_email: str, subject: str, html_body: str) -> None:
+    if not _email_enabled():         # ← baru, baris pertama di dalam fungsi
+        print(f"[DRY RUN] Email not sent -> {to_email} | {subject}")
+        return
     sender = st.secrets["gmail"]["address"]
     app_password = st.secrets["gmail"]["app_password"]
 
