@@ -6,7 +6,7 @@ PLN mengisi realisasi durasi curtailment (jam + menit); sistem menghitung insent
 
 import streamlit as st
 
-from utils.dashboard_context import load_dashboard_context, load_requests
+from utils.dashboard_context import load_dashboard_context, load_requests, period_filter
 from utils.settlement_ui import render_settlement_section
 from utils.sheets import get_all_requests, get_all_settlements
 
@@ -24,4 +24,9 @@ with col_refresh:
         get_all_settlements.clear()
 
 requests = load_requests(selected_gi)
-render_settlement_section(selected_gi, requests)
+
+if requests:
+    period_rows, _period = period_filter(requests)
+    render_settlement_section(selected_gi, period_rows)
+else:
+    render_settlement_section(selected_gi, requests)

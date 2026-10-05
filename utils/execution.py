@@ -23,6 +23,7 @@ Mengikuti flowchart "Execution of ADR":
 import datetime as dt
 
 from utils.notify import _build_email_body, _build_response_link, send_email
+from utils.period import current_per_customer
 from utils.sheets import append_request, get_all_requests, update_status
 from utils.tokens import generate_token
 
@@ -78,26 +79,11 @@ def resolve_expired_requests(gi_name: str | None = None) -> list[str]:
 
 def latest_per_customer(requests: list[dict]) -> list[dict]:
     """
-    Kalau 1 pelanggan punya beberapa baris (iterasi 1, 2, dst, atau beberapa
-    kali "Send Notification" di sesi berbeda), ambil baris dengan nomor
-    iterasi tertinggi sebagai status "saat ini". Kalau iterasinya sama
-    (misal beberapa kali Send Notification tanpa pernah di-iterasi), baris
-    dengan sent_at paling baru yang dipakai.
+    Status "saat ini" tiap pelanggan+feeder = baris TERAKHIR dari EVENT TERBARU-nya
+    (event = iterasi 1 + iterasi lanjutannya; lihat utils/period.py). Event lama yang
+    iterasinya lebih tinggi TIDAK mengalahkan event baru yang baru dikirim iterasi 1.
     """
-    latest: dict[tuple, dict] = {}
-    for r in requests:
-        key = (r.get("feeder", ""), r.get("customer_name", ""))
-        iteration = int(r.get("iteration") or 1)
-        existing = latest.get(key)
-        if existing is None:
-            latest[key] = r
-            continue
-        existing_iteration = int(existing.get("iteration") or 1)
-        if iteration > existing_iteration:
-            latest[key] = r
-        elif iteration == existing_iteration and str(r.get("sent_at", "")) >= str(existing.get("sent_at", "")):
-            latest[key] = r
-    return list(latest.values())
+    return current_per_customer(requests)
 
 
 def _iteration_of(r: dict) -> int:

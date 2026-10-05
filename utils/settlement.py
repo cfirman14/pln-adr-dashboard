@@ -32,7 +32,8 @@ Nilai tarif bisa ditimpa dari config.py dengan menambah konstanta bernama sama.
 import datetime as dt
 
 import config
-from utils.execution import MAX_ITERATIONS, latest_per_customer
+from utils.execution import MAX_ITERATIONS
+from utils.period import final_per_event
 
 INCENTIVE_SHARE = getattr(config, "INCENTIVE_SHARE", 1 / 3)
 PENALTY_RATIO = getattr(config, "PENALTY_RATIO", 0.80)
@@ -67,7 +68,8 @@ def _float(value) -> float:
 
 def classify(latest: list[dict]) -> dict:
     """
-    Kelompokkan status TERKINI tiap pelanggan (hasil latest_per_customer):
+    Kelompokkan status AKHIR tiap event pelanggan (hasil final_per_event; pelanggan yang
+    ikut >1 event dalam periode muncul sekali per event):
       reward  : iterasi 1 & ACCEPTED 100% / ACCEPTED 100% (AUTO)
       penalty : REJECTED di iterasi >= MAX_ITERATIONS
       pending : masih PENDING
@@ -125,7 +127,7 @@ def compute_settlements(
     Tiap item berisi semua angka yang dipakai (untuk ditampilkan & disimpan).
     """
     durations = durations or {}
-    groups = classify(latest_per_customer(requests))
+    groups = classify(final_per_event(requests))
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     def base(r: dict, kind: str, power_kw: float, rate: float, factor: float, formula: str) -> dict:

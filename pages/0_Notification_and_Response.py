@@ -8,9 +8,10 @@ import pandas as pd
 import streamlit as st
 
 import config
-from utils.dashboard_context import load_dashboard_context, load_requests
+from utils.dashboard_context import load_dashboard_context, load_requests, period_filter
 from utils.execution import MAX_ITERATIONS, latest_per_customer, run_next_iteration, split_rejected
 from utils.notify import send_notifications
+from utils.period import final_per_event
 from utils.sheets import get_all_requests
 
 st.set_page_config(page_title="Notifikasi & Respons — DR", layout="wide")
@@ -89,9 +90,16 @@ if requests is not None:
     if not requests:
         st.info("No notification has been sent yet for this substation.")
     else:
-        # Status "saat ini" per pelanggan (kalau pernah dikirimi lebih dari 1 kali,
-        # ambil yang iterasinya paling tinggi / paling baru).
-        latest = latest_per_customer(requests)
+        # Periode yang dipilih: hanya event (iterasi 1 + lanjutannya) yang mulai di rentang tanggal ini.
+        period_rows, _period = period_filter(requests)
+        if not period_rows:
+            st.info("No notification records in the selected period.")
+            st.stop()
+
+        # Status AKHIR tiap event pelanggan di periode ini (iterasi tertinggi per event).
+        latest = final_per_event(period_rows)
+        # Event TERBARU tiap pelanggan (seluruh riwayat): hanya event ini yang boleh di-iterasi lagi.
+        current_tokens = {r["token"] for r in latest_per_customer(requests)}
 
         pending = [r for r in latest if str(r.get("status", "")).upper() == "PENDING"]
         accepted_100 = [r for r in latest if str(r.get("status", "")).upper() == "ACCEPTED 100%"]
@@ -119,15 +127,16 @@ if requests is not None:
             f"(still pending: {pending_kw:.2f} kW awaiting response)"
         )
 
-        df_requests = pd.DataFrame(requests)
+        df_requests = pd.DataFrame(period_rows)
         display_cols = [
-            "feeder", "customer_name", "email", "iteration",
+            "_event_date", "feeder", "customer_name", "email", "iteration",
             "target_curtailment_kw", "status", "responded_kw",
             "sent_at", "responded_at",
         ]
         display_cols = [c for c in display_cols if c in df_requests.columns]
         st.dataframe(
             df_requests[display_cols].rename(columns={
+                "_event_date": "Event date",
                 "feeder": "Feeder",
                 "customer_name": "Customer",
                 "email": "Email",
@@ -141,7 +150,7 @@ if requests is not None:
             use_container_width=True,
             hide_index=True,
         )
-        st.caption("Table above shows full history. Metrics above use each customer's latest response only.")
+        st.caption("Table above shows the full history of the selected period. Metrics use the last response of each event only.")
 
         if rejected_final:
             final_kw = sum(float(r.get("target_curtailment_kw") or 0) for r in rejected_final)
@@ -152,7 +161,14 @@ if requests is not None:
                 + f" — unfulfilled target: {final_kw:.2f} kW."
             )
 
-        feeders_with_rejection = sorted({r["feeder"] for r in rejected_retryable})
+        # Tombol iterasi hanya untuk event TERBARU pelanggan (event lama tidak boleh dikirim ulang).
+        rejected_current = [r for r in rejected_retryable if r["token"] in current_tokens]
+        n_old = len(rejected_retryable) - len(rejected_current)
+        if n_old:
+            st.caption(
+                f"{n_old} declined customer(s) in this period belong to an older event and can no longer be re-iterated."
+            )
+        feeders_with_rejection = sorted({r["feeder"] for r in rejected_current})
         if feeders_with_rejection:
             if df_alloc.empty:
                 st.info(
