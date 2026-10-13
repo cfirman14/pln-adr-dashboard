@@ -33,10 +33,13 @@ _EPOCH = dt.datetime(1970, 1, 1, tzinfo=dt.timezone.utc)
 
 def parse_sent_at(value) -> dt.datetime | None:
     """'2026-10-05 16:50:00 UTC' -> datetime UTC. None kalau formatnya tidak dikenal."""
-    try:
-        return dt.datetime.strptime(str(value), SENT_AT_FORMAT).replace(tzinfo=dt.timezone.utc)
-    except (ValueError, TypeError):
-        return None
+    text = str(value).strip()
+    for fmt in (SENT_AT_FORMAT, "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):   # tanpa "UTC" dianggap UTC juga
+        try:
+            return dt.datetime.strptime(text, fmt).replace(tzinfo=dt.timezone.utc)
+        except ValueError:
+            continue
+    return None
 
 
 def to_local_date(moment: dt.datetime | None) -> dt.date | None:
@@ -92,8 +95,17 @@ def date_bounds(rows: list[dict]) -> tuple[dt.date, dt.date] | None:
 
 
 def filter_by_period(rows: list[dict], start: dt.date, end: dt.date) -> list[dict]:
-    """Baris (hasil annotate_events) yang EVENT-nya mulai antara start dan end (inklusif)."""
-    return [r for r in rows if r.get("_event_date") and start <= r["_event_date"] <= end]
+    """
+    Baris (hasil annotate_events) yang EVENT-nya mulai antara start dan end (inklusif).
+    Baris yang tanggalnya TIDAK terbaca (format sent_at aneh) tetap disertakan di setiap periode,
+    supaya data tidak diam-diam hilang dari tampilan.
+    """
+    return [r for r in rows if not r.get("_event_date") or start <= r["_event_date"] <= end]
+
+
+def count_undated(rows: list[dict]) -> int:
+    """Jumlah baris (hasil annotate_events) yang tanggalnya tidak terbaca."""
+    return sum(1 for r in rows if not r.get("_event_date"))
 
 
 def _pick_final(rows: list[dict]) -> dict:

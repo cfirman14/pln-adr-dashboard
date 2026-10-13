@@ -1,12 +1,13 @@
 """
-Halaman PLN — Reward & Penalty.
-PLN mengisi realisasi durasi curtailment (jam + menit); sistem menghitung insentif
-(reward) dan penalty, lalu hasilnya bisa disimpan ke tab "Reward_Penalty" di Google Sheet.
+Halaman PLN — Reward & Penalty (yang BELUM diisi durasinya).
+PLN mengisi realisasi durasi curtailment (jam + menit) per pelanggan; setelah disimpan ke tab
+"Reward_Penalty" di Google Sheet, pelanggan itu pindah ke halaman "Reward and Penalty History".
+Semua tanggal ditampilkan: kewajiban yang belum diisi tidak boleh tersembunyi oleh filter periode.
 """
 
 import streamlit as st
 
-from utils.dashboard_context import load_dashboard_context, load_requests, period_filter
+from utils.dashboard_context import load_dashboard_context, load_requests
 from utils.settlement_ui import render_settlement_section
 from utils.sheets import get_all_requests, get_all_settlements
 
@@ -23,10 +24,4 @@ with col_refresh:
         get_all_requests.clear()
         get_all_settlements.clear()
 
-requests = load_requests(selected_gi)
-
-if requests:
-    period_rows, _period = period_filter(requests)
-    render_settlement_section(selected_gi, period_rows)
-else:
-    render_settlement_section(selected_gi, requests)
+render_settlement_section(selected_gi, load_requests(selected_gi))

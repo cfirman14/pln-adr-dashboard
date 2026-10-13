@@ -77,8 +77,9 @@ def _render_row(item: dict, saved_row: dict | None, requests, kind: str) -> None
     cols = st.columns(widths, vertical_alignment="center")
     i = iter(range(len(widths)))
 
+    when = f" · {html.escape(str(item['event_date']))}" if item.get("event_date") else ""
     _cell(cols[next(i)], f"<b>{html.escape(str(item['customer_name']))}</b><br>"
-                         f"<span style='opacity:0.7'>{html.escape(str(item['feeder']))}</span>")
+                         f"<span style='opacity:0.7'>{html.escape(str(item['feeder']))}{when}</span>")
     _cell(cols[next(i)], f"{item['power_kw']:.2f}", "right")
 
     # ---- kolom durasi ----
@@ -133,11 +134,12 @@ def _render_row(item: dict, saved_row: dict | None, requests, kind: str) -> None
         st.rerun()
 
 
-def _render_group(title: str, caption: str, items: list[dict], saved_by_key: dict, requests, kind: str) -> None:
+def _render_group(title: str, caption: str, items: list[dict], saved_by_key: dict, requests, kind: str,
+                  empty_text: str = "") -> None:
     st.markdown(title)
     st.caption(caption)
     if not items:
-        st.info("No customer is eligible yet." if kind == "REWARD" else "No customer is subject to a penalty.")
+        st.info(empty_text or ("No customer is eligible yet." if kind == "REWARD" else "No customer is subject to a penalty."))
         return
 
     if kind == "PENALTY":
@@ -160,6 +162,7 @@ def _render_group(title: str, caption: str, items: list[dict], saved_by_key: dic
 
 
 def render_settlement_section(gi_name: str, requests) -> None:
+    """Pelanggan yang berhak reward/penalty tetapi BELUM disimpan durasinya (pekerjaan PLN yang tersisa)."""
     st.subheader("Reward & Penalty Settlement")
 
     if requests is None:
@@ -176,7 +179,7 @@ def render_settlement_section(gi_name: str, requests) -> None:
 
     st.caption(
         "Fill in the **realized curtailment duration for each customer** and press Save on that row. "
-        "Saved rows are locked; use ✏️ Edit to correct a single customer. "
+        "Saved customers move to **Reward & Penalty History**. "
         "Reward only goes to customers who accepted 100% in iteration 1 (incl. auto-accept). "
         f"Penalty only applies to customers still REJECTED after iteration {MAX_ITERATIONS}."
     )
@@ -186,7 +189,7 @@ def render_settlement_section(gi_name: str, requests) -> None:
     )
 
     result = compute_settlements(requests)          # pelanggan yang berhak; durasi 0 = belum diisi
-    rewards, penalties, groups = result["rewards"], result["penalties"], result["groups"]
+    groups = result["groups"]
 
     try:
         saved_rows = get_all_settlements(gi_name)
@@ -195,28 +198,29 @@ def render_settlement_section(gi_name: str, requests) -> None:
         st.warning(f"Could not read saved calculations ({e}). Saved rows can't be shown right now.")
     saved_by_key = {str(r.get("key", "")): r for r in saved_rows}
 
-    # ---------------- Ringkasan: hanya yang SUDAH disimpan ----------------
-    saved_rewards = [saved_by_key[x["key"]] for x in rewards if x["key"] in saved_by_key]
-    saved_penalties = [saved_by_key[x["key"]] for x in penalties if x["key"] in saved_by_key]
-    total_eligible = len(rewards) + len(penalties)
-    n_saved = len(saved_rewards) + len(saved_penalties)
+    rewards_all, penalties_all = result["rewards"], result["penalties"]
+    rewards = [x for x in rewards_all if x["key"] not in saved_by_key]
+    penalties = [x for x in penalties_all if x["key"] not in saved_by_key]
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("🎁 Total incentive (saved)", _idr(sum(float(r["amount_idr"]) for r in saved_rewards)))
-    m2.metric("⚠️ Total penalty (saved)", _idr(sum(float(r["amount_idr"]) for r in saved_penalties)))
-    m3.metric("Customers saved", f"{n_saved} / {total_eligible}")
-    m4.metric("Awaiting duration", total_eligible - n_saved)
+    m1, m2 = st.columns(2)
+    m1.metric("🎁 Reward awaiting duration", len(rewards))
+    m2.metric("⚠️ Penalty awaiting duration", len(penalties))
+   
+    if not rewards and not penalties:
+        st.success("Nothing is waiting for a duration. Saved calculations are on the **Reward and Penalty History** page.")
 
     _render_group(
         "**Reward (incentive)** — accepted 100% in iteration 1",
         f"I = {INCENTIVE_SHARE:.2f} (1/3) × C_avoidable × P_curtailed × T",
         rewards, saved_by_key, requests, "REWARD",
+        empty_text="No customer is waiting for a reward duration.",
     )
     st.write("")
     _render_group(
         f"**Penalty** — still REJECTED after iteration {MAX_ITERATIONS}",
         f"Penalty = {PENALTY_RATIO:.0%} × C_energy × P_offered,2nd × T",
         penalties, saved_by_key, requests, "PENALTY",
+        empty_text="No customer is waiting for a penalty duration.",
     )
 
     n_pending, n_await, n_neutral = len(groups["pending"]), len(groups["awaiting"]), len(groups["neutral"])
@@ -224,4 +228,59 @@ def render_settlement_section(gi_name: str, requests) -> None:
         f"Not included — no reward & no penalty: {n_neutral} customer(s) (Accept 80%, or accepted in "
         f"iteration {MAX_ITERATIONS}); {n_await} declined in iteration 1 and not re-iterated yet; "
         f"{n_pending} still pending."
+    )
+
+
+_NUMERIC_SAVED = ("power_kw", "duration_hours", "energy_kwh", "rate_idr_per_kwh", "factor", "amount_idr")
+
+
+def _num(value) -> float:
+    try:
+        return float(value or 0)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def render_history_section(saved_items: list[dict]) -> None:
+    """
+    Riwayat: baris yang SUDAH tersimpan di tab Reward_Penalty (sudah difilter periode oleh halaman).
+    Tiap item = baris tersimpan + "event_date" (teks). Baris terkunci; ✏️ Edit per pelanggan.
+    """
+    st.subheader("Reward & Penalty History")
+
+    flash = st.session_state.pop(FLASH_KEY, None)
+    if flash:
+        (st.success if flash[0] == "success" else st.error)(flash[1])
+
+    st.caption("Saved reward & penalty calculations. Use ✏️ Edit to correct the duration of a single customer.")
+    st.caption(
+        f"Rates are fixed in the script (config.py): C_avoidable = **{_idr(C_AVOIDABLE_IDR_PER_KWH)}/kWh**, "
+        f"C_energy = **{_idr(C_ENERGY_IDR_PER_KWH)}/kWh**."
+    )
+
+    items = []
+    for raw in saved_items:
+        item = dict(raw)
+        for col in _NUMERIC_SAVED:
+            item[col] = _num(item.get(col))
+        items.append(item)
+    rewards = [x for x in items if str(x.get("type", "")).upper() == "REWARD"]
+    penalties = [x for x in items if str(x.get("type", "")).upper() == "PENALTY"]
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("🎁 Total incentive", _idr(sum(x["amount_idr"] for x in rewards)))
+    m2.metric("⚠️ Total penalty", _idr(sum(x["amount_idr"] for x in penalties)))
+    m3.metric("Customers settled", len(items))
+
+    saved_by_key = {str(x.get("key", "")): x for x in items}
+    _render_group(
+        "**Reward (incentive)** — accepted 100% in iteration 1",
+        f"I = {INCENTIVE_SHARE:.2f} (1/3) × C_avoidable × P_curtailed × T",
+        rewards, saved_by_key, None, "REWARD", empty_text="No saved reward in this period.",
+    )
+    st.write("")
+    _render_group(
+        f"**Penalty** — still REJECTED after iteration {MAX_ITERATIONS}",
+        f"Penalty = {PENALTY_RATIO:.0%} × C_energy × P_offered,2nd × T",
+        penalties, saved_by_key, None, "PENALTY", empty_text="No saved penalty in this period.",
     )

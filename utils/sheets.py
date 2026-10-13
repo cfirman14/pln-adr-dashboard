@@ -32,6 +32,7 @@ import datetime as dt
 
 import gspread
 import streamlit as st
+from gspread.utils import numericise_all
 from google.oauth2.service_account import Credentials
 
 SCOPES = [
@@ -77,6 +78,33 @@ def _get_worksheet():
     return worksheet
 
 
+def _read_records(worksheet) -> list[dict]:
+    """
+    Pengganti get_all_records() bawaan gspread yang TOLERAN terhadap header bermasalah:
+    kolom header kosong diabaikan, dan kalau ada nama header kembar hanya kolom
+    pertama yang dipakai. (get_all_records bawaan langsung error "header row contains
+    duplicates", mis. kalau ada kolom nyasar di sebelah kanan.)
+    Angka tetap diubah jadi int/float seperti sebelumnya.
+    """
+    values = worksheet.get_all_values()
+    if not values:
+        return []
+    first_col: dict[str, int] = {}
+    for i, name in enumerate(values[0]):
+        name = str(name).strip()
+        if name and name not in first_col:
+            first_col[name] = i
+
+    records = []
+    for row in values[1:]:
+        if not any(str(c).strip() for c in row):
+            continue
+        padded = list(row) + [""] * (len(values[0]) - len(row))
+        numeric = numericise_all(padded)
+        records.append({name: numeric[i] for name, i in first_col.items()})
+    return records
+
+
 def append_request(row: dict) -> None:
     """Tambah 1 baris permintaan baru (status awal selalu PENDING)."""
     worksheet = _get_worksheet()
@@ -87,7 +115,7 @@ def append_request(row: dict) -> None:
 def get_request_by_token(token: str) -> dict | None:
     """Cari 1 baris permintaan berdasarkan token. None kalau tidak ketemu."""
     worksheet = _get_worksheet()
-    records = worksheet.get_all_records()
+    records = _read_records(worksheet)
     for record in records:
         if str(record.get("token", "")) == token:
             return record
@@ -128,7 +156,7 @@ def get_all_requests(gi_name: str | None = None) -> list[dict]:
     Di-cache 15 detik supaya tidak terlalu sering panggil Google Sheets API.
     """
     worksheet = _get_worksheet()
-    records = worksheet.get_all_records()
+    records = _read_records(worksheet)
     if gi_name:
         records = [r for r in records if str(r.get("gi", "")) == gi_name]
     return records
@@ -207,7 +235,32 @@ def upsert_settlements(rows: list[dict]) -> dict:
 @st.cache_data(ttl=15, show_spinner=False)
 def get_all_settlements(gi_name: str | None = None) -> list[dict]:
     """Baca semua baris tab Reward_Penalty (opsional difilter per GI)."""
-    records = _get_settlement_worksheet().get_all_records()
+    records = _read_records(_get_settlement_worksheet())
     if gi_name:
         records = [r for r in records if str(r.get("gi", "")) == gi_name]
     return records
+
+
+def get_connection_info() -> dict:
+    """
+    Diagnostik: spreadsheet MANA yang sebenarnya dibaca app ini, tab apa saja, dan berapa baris datanya.
+    (Berguna kalau tampilan tidak cocok dengan isi sheet yang sedang dibuka di browser.)
+    """
+    sheet_id = st.secrets["app"]["sheet_id"]
+    spreadsheet = _get_client().open_by_key(sheet_id)
+    tabs = [ws.title for ws in spreadsheet.worksheets()]
+
+    def data_rows(ws) -> int:
+        return sum(1 for row in ws.get_all_values()[1:] if any(str(c).strip() for c in row))
+
+    info = {
+        "title": spreadsheet.title,
+        "id_tail": str(sheet_id)[-6:],
+        "tabs": tabs,
+        "first_tab": spreadsheet.sheet1.title,
+        "request_rows": data_rows(spreadsheet.sheet1),
+        "settlement_rows": None,
+    }
+    if SETTLEMENT_SHEET_NAME in tabs:
+        info["settlement_rows"] = data_rows(spreadsheet.worksheet(SETTLEMENT_SHEET_NAME))
+    return info

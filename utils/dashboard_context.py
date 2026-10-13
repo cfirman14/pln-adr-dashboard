@@ -17,8 +17,8 @@ import config
 from utils.curtailment import allocate_customer_curtailment
 from utils.data_loader import get_latest_snapshot, load_customer_data, load_feeder_data
 from utils.execution import resolve_expired_requests
-from utils.period import annotate_events, date_bounds, filter_by_period, today_local
-from utils.sheets import get_all_requests
+from utils.period import count_undated, annotate_events, date_bounds, filter_by_period, today_local
+from utils.sheets import get_all_requests, get_connection_info
 from utils.threshold import run_dr_trigger_check, run_threshold_check
 
 
@@ -59,6 +59,22 @@ def load_dashboard_context() -> DashboardContext:
     if st.session_state.get("selected_gi") not in gi_list:
         st.session_state.pop("selected_gi", None)      # pilihan lama tidak ada di data ini
     selected_gi = st.sidebar.selectbox("Choose Substation", gi_list, key="selected_gi")
+
+    with st.sidebar.expander("Google Sheets connection"):
+        if st.button("Check connection", key="check_sheets"):
+            try:
+                info = get_connection_info()
+                st.markdown(
+                    f"**Spreadsheet:** {info['title']} (…{info['id_tail']})  \n"
+                    f"**Tabs:** {', '.join(info['tabs'])}  \n"
+                    f"**Request rows** ('{info['first_tab']}'): {info['request_rows']}  \n"
+                    f"**Saved reward/penalty rows:** "
+                    f"{'tab not created yet' if info['settlement_rows'] is None else info['settlement_rows']}"
+                )
+            except KeyError as e:
+                st.warning(f"Not configured (missing secret: {e}).")
+            except Exception as e:
+                st.warning(f"Cannot read the spreadsheet: {e}")
 
     st.sidebar.divider()
     st.sidebar.caption(f"Capacity/feeder: {config.MAX_PER_FEEDER_KW} kW")
@@ -119,12 +135,13 @@ def load_requests(selected_gi: str):
 PERIOD_KEY = "period_range"
 
 
-def period_filter(requests: list[dict], prefix: str = "period"):
+def period_filter(requests: list[dict], prefix: str = "period", default: str = "latest"):
     """
     Pemilih periode (rentang tanggal EVENT, WIB) untuk halaman Notifikasi & Reward/Penalty.
     Tanggal event = tanggal iterasi 1 (iterasi 2 yang lewat tengah malam tetap ikut event awalnya).
     Default: hari terakhir yang punya data. Pilihan ikut terbawa antar halaman (key yang sama).
 
+    default: "latest" (hari terakhir yang punya data) atau "all" (seluruh tanggal) — dipakai saat belum ada pilihan.
     prefix: awalan key widget; halaman berbeda (mis. portal pelanggan) memakai prefix sendiri
     supaya pilihannya tidak tercampur dengan halaman PLN.
 
@@ -138,14 +155,16 @@ def period_filter(requests: list[dict], prefix: str = "period"):
         return annotated, None
     lo, hi = bounds
     max_day = max(hi, today_local())
+    # Kalender boleh memilih tanggal lebih awal dari data (hasilnya cukup kosong), supaya tidak terasa 'terkunci'.
+    min_day = min(lo, today_local() - dt.timedelta(days=365))
 
     current = st.session_state.get(range_key)
     valid = (
         isinstance(current, (tuple, list)) and 1 <= len(current) <= 2
-        and all(isinstance(d, dt.date) and lo <= d <= max_day for d in current)
+        and all(isinstance(d, dt.date) and min_day <= d <= max_day for d in current)
     )
     if not valid:
-        st.session_state[range_key] = (hi, hi)
+        st.session_state[range_key] = (lo, hi) if default == "all" else (hi, hi)
 
     col_date, col_quick = st.columns([2, 3], vertical_alignment="bottom")
     # Tombol cepat diproses SEBELUM date_input dibuat (boleh mengubah nilainya di run yang sama).
@@ -159,7 +178,7 @@ def period_filter(requests: list[dict], prefix: str = "period"):
             st.session_state[range_key] = (lo, hi)
     with col_date:
         picked = st.date_input(
-            "Period (event date, WIB)", min_value=lo, max_value=max_day,
+            "Period (event date, WIB)", min_value=min_day, max_value=max_day,
             key=range_key, format="DD/MM/YYYY",
         )
 
@@ -169,6 +188,13 @@ def period_filter(requests: list[dict], prefix: str = "period"):
     n_events = len({r["_event_id"] for r in rows})
     st.caption(
         f"Showing **{n_events} event(s)** ({len(rows)} record(s)) from {start:%d/%m/%Y} to {end:%d/%m/%Y} "
-        f"— of {len({r['_event_id'] for r in annotated})} event(s) in the sheet. Dates are in WIB (UTC+7)."
+        f"— of {len({r['_event_id'] for r in annotated})} event(s) in the sheet "
+        f"(data available: {lo:%d/%m/%Y} – {hi:%d/%m/%Y}). Dates are in WIB (UTC+7)."
     )
+    n_undated = count_undated(annotated)
+    if n_undated:
+        st.warning(
+            f"{n_undated} record(s) have an unreadable 'sent_at' date and are shown in every period. "
+            "Expected format: 2026-10-05 10:00:00 UTC."
+        )
     return rows, (start, end)

@@ -33,7 +33,7 @@ import datetime as dt
 
 import config
 from utils.execution import MAX_ITERATIONS
-from utils.period import final_per_event
+from utils.period import annotate_events, final_per_event
 
 INCENTIVE_SHARE = getattr(config, "INCENTIVE_SHARE", 1 / 3)
 PENALTY_RATIO = getattr(config, "PENALTY_RATIO", 0.80)
@@ -142,6 +142,7 @@ def compute_settlements(
             "email": r.get("email", ""),
             "basis_token": r.get("token", ""),
             "iteration": _iteration_of(r),
+            "event_date": r["_event_date"].strftime("%d/%m/%Y") if r.get("_event_date") else "",
             "power_kw": round(power_kw, 2),
             "rate_idr_per_kwh": rate,
             "factor": factor,                      # tidak dibulatkan: 1/3 harus tetap tepat
@@ -162,3 +163,31 @@ def compute_settlements(
                               "80% x C_energy x P_offered,2nd x T"))
 
     return {"rewards": rewards, "penalties": penalties, "groups": groups}
+
+
+def history_rows(saved_rows: list[dict], requests: list[dict] | None) -> list[dict]:
+    """
+    Riwayat reward/penalty dibaca LANGSUNG dari baris tersimpan (tab Reward_Penalty), bukan dihitung
+    ulang dari status request saat ini — catatan yang sudah disimpan adalah catatan resmi dan tidak
+    boleh hilang hanya karena status di tab request berubah.
+
+    Tiap baris tersimpan dibungkus menjadi "pseudo-request" supaya bisa memakai pemilih periode yang
+    sama (utils.period): tanggalnya = tanggal event asalnya (lewat basis_token ke tab request);
+    kalau token tidak ditemukan, dipakai waktu `calculated_at`. Aslinya ada di kunci "_saved".
+    """
+    start_by_token = {
+        str(r.get("token", "")): r["_event_start"]
+        for r in annotate_events(requests or []) if r.get("token") and r.get("_event_start")
+    }
+    out = []
+    for s in saved_rows:
+        token = str(s.get("basis_token", ""))
+        out.append({
+            "token": token or str(s.get("key", "")),
+            "feeder": s.get("feeder", ""),
+            "customer_name": s.get("customer_name", ""),
+            "iteration": 1,                      # tiap baris = event sendiri (tidak saling mewarisi tanggal)
+            "sent_at": start_by_token.get(token) or str(s.get("calculated_at", "")),
+            "_saved": dict(s),
+        })
+    return out

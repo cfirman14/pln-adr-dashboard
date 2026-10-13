@@ -59,10 +59,12 @@ def requests_for_customer(requests: list[dict], idpel: str, customers: list[dict
 
 def settlements_in_period(settlements: list[dict], period_rows: list[dict]) -> list[dict]:
     """
-    Reward/penalti tersimpan yang dasarnya (basis_token) adalah baris TERAKHIR salah satu event
+    Reward/penalti tersimpan yang dasarnya (basis_token) adalah salah satu baris event
     dalam periode. Tiap item diberi `_event_date`. Hanya menyentuh token milik pelanggan ini.
     """
-    final_by_token = {r["token"]: r for r in final_per_event(period_rows)}
+    # Cocokkan ke SEMUA baris periode (bukan hanya baris terakhir event): reward/penalti yang sudah
+    # tersimpan tidak boleh hilang hanya karena kemudian ada iterasi/baris baru.
+    final_by_token = {str(r["token"]): r for r in period_rows}
     out = []
     for s in settlements:
         base = final_by_token.get(str(s.get("basis_token", "")))
